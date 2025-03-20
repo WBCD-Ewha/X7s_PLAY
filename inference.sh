@@ -47,5 +47,5 @@ sleep 1
 gnome-terminal --title="realsense" -- bash -c "cd ${workspace}/X7s_PLAY/realsense_camera; bash realsense.sh; exec bash"
 sleep 1
 gnome-terminal --title="inference" -- bash -c "cd ${workspace}/X7s_PLAY/mobile_aloha; source ./venv/bin/activate; \
-python inference.py --max_publish_step $max_publish_step --ckpt $ckpt_dir --ckpt_name $ckpt_name; exec bash"
+python inference.py --max_publish_step $max_publish_step --ckpt_dir $ckpt_dir --ckpt_name $ckpt_name; exec bash"
 sleep 1
