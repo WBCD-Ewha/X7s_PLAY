@@ -21,22 +21,28 @@ check_executable() {
     fi
 }
 
-check_path "${workspace}/ARX_X7s/ARX_CAN"
-check_path "${workspace}/ARX_X7s/X7s_Body_SDK"
-check_path "${workspace}/ARX_X7s/ARX_X7s_SDK"
+check_path "${workspace}/X7s/ARX_CAN/arx_can"
+check_path "${workspace}/X7s/body/ROS"
+check_path "${workspace}/X7s/x7s/ROS/x7s_ws"
 check_path "${workspace}/X7s_PLAY/realsense_camera"
 check_path "${workspace}/X7s_PLAY/mobile_aloha"
 
-check_executable "${workspace}/ARX_X7s/ARX_CAN/can.sh"
-check_executable "${workspace}/ARX_X7s/X7s_Body_SDK/LIFT.sh"
-check_executable "${workspace}/ARX_X7s/ARX_X7s_SDK/play.sh"
+check_executable "${workspace}/X7s/ARX_CAN/arx_can/arx_can1.sh"
+check_executable "${workspace}/X7s/ARX_CAN/arx_can/arx_can3.sh"
+check_executable "${workspace}/X7s/ARX_CAN/arx_can/arx_can5.sh"
 check_executable "${workspace}/X7s_PLAY/realsense_camera/realsense.sh"
 
-gnome-terminal --title="can" -- bash -c "cd ${workspace}/ARX_X7s/ARX_CAN; bash can.sh; exec bash"
+gnome-terminal --title="can1" -x bash -c "cd ${workspace}/X7s/ARX_CAN/arx_can; bash arx_can1.sh; exec bash"
 sleep 1
-gnome-terminal --title="x7" -- bash -c "cd ${workspace}/ARX_X7s/ARX_X7s_SDK; bash play.sh; exec bash"
+gnome-terminal --title="can3" -x bash -c "cd ${workspace}/X7s/ARX_CAN/arx_can; bash arx_can3.sh; exec bash"
 sleep 1
-gnome-terminal --title="lift" -- bash -c "cd ${workspace}/ARX_X7s/X7s_Body_SDK; bash LIFT.sh; exec bash"
+gnome-terminal --title="can5" -x bash -c "cd ${workspace}/X7s/ARX_CAN/arx_can; bash arx_can5.sh; exec bash"
+sleep 1
+gnome-terminal --title="body" -- bash -c "cd ${workspace}/X7s/body/ROS; source ./devel/setup.bash && roslaunch arx_lift_controller x7s.launch; exec bash"
+sleep 1
+gnome-terminal --title="left_arm" -- bash -c "cd ${workspace}/X7s/x7s/ROS/x7s_ws; source ./devel/setup.bash && roslaunch arx_x7_controller left_arm_inference.launch; exec bash"
+sleep 1
+gnome-terminal --title="right_arm" -- bash -c "cd ${workspace}/X7s/x7s/ROS/x7s_ws; source ./devel/setup.bash && roslaunch arx_x7_controller right_arm_inference.launch; exec bash"
 sleep 1
 gnome-terminal --title="realsense" -- bash -c "cd ${workspace}/X7s_PLAY/realsense_camera; bash realsense.sh; exec bash"
 sleep 1
