@@ -379,7 +379,7 @@ class RosOperator:
         for cam_name in self.args.camera_names:
             if cam_name in img_data:
                 deque_map = {
-                    'head_left': self.img_head_deque,
+                    'head': self.img_head_deque,
                     'left_wrist': self.img_left_deque,
                     'right_wrist': self.img_right_deque,
                 }
@@ -400,7 +400,7 @@ class RosOperator:
             if self.args.use_depth_image:
                 if cam_name in img_depth_data:
                     deque_map = {
-                        'head_left_depth': self.img_head_depth_deque,
+                        'head_depth': self.img_head_depth_deque,
                         'left_wrist_depth': self.img_left_depth_deque,
                         'right_wrist_depth': self.img_right_depth_deque,
                     }
