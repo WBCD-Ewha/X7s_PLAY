@@ -16,9 +16,9 @@ check_path() {
     fi
 }
 
-check_path "${workspace}/ARX_PLAY/mobile_aloha"
-check_path "${workspace}/ARX_PLAY/mobile_aloha/$datasets"
+check_path "${workspace}/X7s_PLAY/mobile_aloha"
+check_path "${workspace}/X7s_PLAY/mobile_aloha/$datasets"
 
-gnome-terminal --title="train" -- bash -c "cd ${workspace}/ARX_PLAY/mobile_aloha/; source ./venv/bin/activate; \
+gnome-terminal --title="train" -- bash -c "cd ${workspace}/X7s_PLAY/mobile_aloha/; source ./venv/bin/activate; \
 python train.py --datasets $datasets --ckpt_dir $ckpt_dir --num_episodes $num_episodes --batch_size $batch_size --epochs $epochs; exec bash"
 sleep 1
