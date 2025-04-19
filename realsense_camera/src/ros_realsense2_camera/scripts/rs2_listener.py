@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import sys
 import time
 import rospy
@@ -8,10 +9,15 @@ import sensor_msgs.point_cloud2 as pc2
 from sensor_msgs.msg import Imu as msg_Imu
 import numpy as np
 from cv_bridge import CvBridge, CvBridgeError
+import cv2
 import inspect
 import ctypes
 import struct
+import open3d as o3d
+from datetime import datetime
 import tf
+import imageio.v2 as imageio
+
 try:
     from theora_image_transport.msg import Packet as msg_theora
 except Exception:
@@ -47,15 +53,17 @@ class CWaitForMessage:
         self.listener = None
         self.prev_msg_time = 0
         self.fout = None
-        
+        self.camera = params.get('camera_name')
+        self.file_dir = params.get('file_directory')
+        print(self.camera)
 
-        self.themes = {'depthStream': {'topic': '/camera/depth/image_rect_raw', 'callback': self.imageColorCallback, 'msg_type': msg_Image},
-                       'colorStream': {'topic': '/camera/color/image_raw', 'callback': self.imageColorCallback, 'msg_type': msg_Image},
-                       'pointscloud': {'topic': '/camera/depth/color/points', 'callback': self.pointscloudCallback, 'msg_type': msg_PointCloud2},
-                       'alignedDepthInfra1': {'topic': '/camera/aligned_depth_to_infra1/image_raw', 'callback': self.imageColorCallback, 'msg_type': msg_Image},
-                       'alignedDepthColor': {'topic': '/camera/aligned_depth_to_color/image_raw', 'callback': self.imageColorCallback, 'msg_type': msg_Image},
-                       'static_tf': {'topic': '/camera/color/image_raw', 'callback': self.imageColorCallback, 'msg_type': msg_Image},
-                       'accelStream': {'topic': '/camera/accel/sample', 'callback': self.imuCallback, 'msg_type': msg_Imu},
+        self.themes = {'depthStream': {'topic': f'/{self.camera}/depth/image_rect_raw', 'callback': self.imageDepthCallback, 'msg_type': msg_Image},
+                       'colorStream': {'topic': f'/{self.camera}/color/image_raw', 'callback': self.imageColorCallback, 'msg_type': msg_Image},
+                       'pointscloud': {'topic': f'/{self.camera}/depth/color/points', 'callback': self.pointscloudCallback, 'msg_type': msg_PointCloud2},
+                       'alignedDepthInfra1': {'topic': f'/{self.camera}/aligned_depth_to_infra1/image_raw', 'callback': self.imageColorCallback, 'msg_type': msg_Image},
+                       'alignedDepthColor': {'topic': f'/{self.camera}/aligned_depth_to_color/image_raw', 'callback': self.imageColorCallback, 'msg_type': msg_Image},
+                       'static_tf': {'topic': f'/{self.camera}/color/image_raw', 'callback': self.imageColorCallback, 'msg_type': msg_Image},
+                       'accelStream': {'topic': f'/{self.camera}/accel/sample', 'callback': self.imuCallback, 'msg_type': msg_Imu},
                        }
 
         self.func_data = dict()
@@ -87,6 +95,9 @@ class CWaitForMessage:
 
     def imageColorCallback(self, theme_name):
         def _imageColorCallback(data):
+            if self.func_data[theme_name].get('saved_once'):
+                return
+
             self.prev_time = time.time()
             self.func_data[theme_name].setdefault('avg', [])
             self.func_data[theme_name].setdefault('ok_percent', [])
@@ -109,13 +120,84 @@ class CWaitForMessage:
             self.func_data[theme_name]['num_channels'].append(channels)
             self.func_data[theme_name]['shape'].append(cv_image.shape)
             self.func_data[theme_name]['reported_size'].append((data.width, data.height, data.step))
+
+            ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")[:-3]
+            npimage_filename = f"{self.file_dir}/{theme_name}_rgb_npimage_{ts}.jpg"
+            cvimage_filename = f"{self.file_dir}/{theme_name}_rgb_cvimage_{ts}.jpg"
+
+            if data.encoding.lower().startswith("bgr"):
+                rgb_uint8 = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+            else:
+                rgb_uint8 = cv_image.copy()
+
+            imageio.imwrite(npimage_filename, rgb_uint8)
+
+            # cv_image 는 data.encoding 에 따라 RGB 또는 BGR
+            if data.encoding.lower().startswith("rgb"):
+                # RGB → BGR 변환 후 OpenCV 저장
+                bgr_for_cv = cv2.cvtColor(cv_image, cv2.COLOR_RGB2BGR)
+            else:  # 이미 BGR
+                bgr_for_cv = cv_image
+            cv2.imwrite(cvimage_filename, bgr_for_cv)
+
+            rospy.loginfo("Saved RGB images to %s  (NumPy)  and  %s  (OpenCV)",
+                          npimage_filename, cvimage_filename)
+
+            self.func_data[theme_name]['saved_once'] = True
+
         return _imageColorCallback
 
-    def imageDepthCallback(self, data):
-        pass
+    def imageDepthCallback(self, theme_name):
+        def _imageDepthCallback(data):
+            if self.func_data[theme_name].get('saved_once'):
+                return
+
+            self.prev_time = time.time()
+            self.func_data[theme_name].setdefault('avg', [])
+            self.func_data[theme_name].setdefault('ok_percent', [])
+            self.func_data[theme_name].setdefault('num_channels', [])
+            self.func_data[theme_name].setdefault('shape', [])
+            self.func_data[theme_name].setdefault('reported_size', [])
+
+            try:
+                cv_image = self.bridge.imgmsg_to_cv2(data, data.encoding)
+            except CvBridgeError as e:
+                print(e)
+                return
+            channels = cv_image.shape[2] if len(cv_image.shape) > 2 else 1
+            pyimg = np.asarray(cv_image)
+
+            ok_number = (pyimg != 0).sum()
+
+            self.func_data[theme_name]['avg'].append(pyimg.sum() / ok_number)
+            self.func_data[theme_name]['ok_percent'].append(
+                float(ok_number) / (pyimg.shape[0] * pyimg.shape[1]) / channels)
+            self.func_data[theme_name]['num_channels'].append(channels)
+            self.func_data[theme_name]['shape'].append(cv_image.shape)
+            self.func_data[theme_name]['reported_size'].append((data.width, data.height, data.step))
+
+            ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")[:-3]
+            npimage_filename = f"{self.file_dir}/{theme_name}_depth_npimage_{ts}.jpg"
+            cvimage_filename = f"{self.file_dir}/{theme_name}_depth_cvimage_{ts}.jpg"
+
+            # 1) 16‑bit/float depth → 8‑bit 그레이스케일
+            depth_uint8 = cv2.normalize(pyimg, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
+            imageio.imwrite(npimage_filename, depth_uint8)
+            cv2.imwrite(cvimage_filename, depth_uint8)
+
+            rospy.loginfo("Saved depth images to %s  (NumPy)  and  %s  (OpenCV)",
+                          npimage_filename, cvimage_filename)
+
+            self.func_data[theme_name]['saved_once'] = True
+
+        return _imageDepthCallback
+
 
     def pointscloudCallback(self, theme_name):
         def _pointscloudCallback(data):
+            if self.func_data[theme_name].get('saved_once'):
+                return
             self.prev_time = time.time()
             print ('Got pointcloud: %d, %d' % (data.width, data.height))
 
@@ -132,7 +214,7 @@ class CWaitForMessage:
                 return
 
             try:
-                points = np.array([pc2_to_xyzrgb(pp) for pp in pc2.read_points(data, skip_nans=True, field_names=("x", "y", "z", "rgb")) if pp[0] > 0])
+                points = np.array([pc2_to_xyzrgb(pp) for pp in pc2.read_points(data, skip_nans=True, field_names=("x", "y", "z", "rgb"))])
             except Exception as e:
                 print(e)
                 return
@@ -140,6 +222,24 @@ class CWaitForMessage:
             self.func_data[theme_name]['size'].append(len(points))
             self.func_data[theme_name]['width'].append(data.width)
             self.func_data[theme_name]['height'].append(data.height)
+
+            # save pointcloud in .ply file using open3d
+            # points 배열: [x, y, z, r, g, b]  ― r g b는 0‑255
+            xyz = points[:, :3]
+            rgb = points[:, 3:] / 255.0  # Open3D는 0‑1 실수 색상
+
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(xyz)
+            pcd.colors = o3d.utility.Vector3dVector(rgb)
+
+            # 고유한 파일이름(테마 이름 + 타임스탬프)
+            ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")[:-3]
+            output_ply_path = f"{self.file_dir}/{theme_name}_pointcloud_{ts}.ply"  # TODO
+
+            o3d.io.write_point_cloud(output_ply_path, pcd, write_ascii=True)
+            rospy.loginfo("Saved point cloud to %s (%d points)", output_ply_path, len(pcd.points))
+            self.func_data[theme_name]['saved_once'] = True
+
         return _pointscloudCallback
 
     def wait_for_message(self, params, msg_type=msg_Image):
@@ -237,6 +337,8 @@ def main():
         print ('When found, prints the timestamp.')
         print
         print ('[Options:]')
+        print ('--camera_name <camera_name>: choose among camera_h, camera_r, camera_l')
+        print ('--file_directory')
         print ('-s <sequential number>')
         print ('--time <secs.nsecs>')
         print ('--timeout <secs>')
@@ -264,6 +366,10 @@ def main():
         msg_type = msg_Image
 
     for idx in range(2, len(sys.argv)):
+        if sys.argv[idx] == '--camera_name':
+            msg_params['camera_name'] = sys.argv[idx + 1]
+        if sys.argv[idx] == '--file_directory':
+            msg_params['file_directory'] = sys.argv[idx + 1]
         if sys.argv[idx] == '-s':
             msg_params['seq'] = int(sys.argv[idx + 1])
         if sys.argv[idx] == '--time':
@@ -287,7 +393,36 @@ def main():
         res = msg_retriever.wait_for_messages(themes)
         print (res)
 
+def visualize_pointcloud(ply_path: str) -> None:
+    print(f"Loading point cloud: {ply_path}")
+    pcd = o3d.io.read_point_cloud(ply_path)
+    if pcd.is_empty():
+        sys.exit("Loaded point cloud is empty or file not found.")
+
+    # 알아보기 쉬운 좌표축 추가(선택사항)
+    coord = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
+
+    # 카메라(뷰어) 파라미터
+    lookat = np.array([0.0, 0.0, 0.0])
+    up = np.array([0.0, 0.0, 1.0])
+    front = np.array([0.0, -1.0, 0.0])  # 뒤에서 앞을 보도록 설정 예시
+    zoom = 0.5
+
+    # 시각화
+    o3d.visualization.draw_geometries(
+        [pcd, coord],
+        window_name="Open3D – Point Cloud Viewer",
+        width=1280,
+        height=720,
+        mesh_show_back_face=True,
+        lookat=lookat,
+        up=up,
+        front=front,
+        zoom=zoom,
+    )
+
 
 if __name__ == '__main__':
     main()
+    # visualize_pointcloud("./pointscloud_pointcloud_20250419T184513567.ply")
 
