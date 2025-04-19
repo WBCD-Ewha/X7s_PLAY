@@ -1,6 +1,6 @@
 <launch>
-  <arg name="serial_no_camera1"    			default="218622272301"/>
-  <arg name="serial_no_camera2"    			default="218622274989"/>
+  <arg name="serial_no_camera1"    			default="318122302212"/>
+  <arg name="serial_no_camera2"    			default="318122302212"/>
   <arg name="serial_no_camera3"    			default=""/>
   <arg name="camera1"              			default="camera_h"/>
   <arg name="camera2"              			default="camera_l"/>
