@@ -122,8 +122,8 @@ class CWaitForMessage:
             self.func_data[theme_name]['reported_size'].append((data.width, data.height, data.step))
 
             ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")[:-3]
-            npimage_filename = f"{self.file_dir}/{theme_name}_rgb_npimage_{ts}.jpg"
-            cvimage_filename = f"{self.file_dir}/{theme_name}_rgb_cvimage_{ts}.jpg"
+            npimage_filename = f"{self.file_dir}/{self.camera}_image_left.jpg"
+            cvimage_filename = f"{self.file_dir}/{self.camera}_image_left_cv.jpg"
 
             if data.encoding.lower().startswith("bgr"):
                 rgb_uint8 = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
@@ -177,8 +177,8 @@ class CWaitForMessage:
             self.func_data[theme_name]['reported_size'].append((data.width, data.height, data.step))
 
             ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")[:-3]
-            npimage_filename = f"{self.file_dir}/{theme_name}_depth_npimage_{ts}.jpg"
-            cvimage_filename = f"{self.file_dir}/{theme_name}_depth_cvimage_{ts}.jpg"
+            npimage_filename = f"{self.file_dir}/{self.camera}_depth_image.jpg"
+            cvimage_filename = f"{self.file_dir}/{self.camera}_depth_image_cv.jpg"
 
             # 1) 16‑bit/float depth → 8‑bit 그레이스케일
             depth_uint8 = cv2.normalize(pyimg, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
@@ -234,7 +234,7 @@ class CWaitForMessage:
 
             # 고유한 파일이름(테마 이름 + 타임스탬프)
             ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")[:-3]
-            output_ply_path = f"{self.file_dir}/{theme_name}_pointcloud_{ts}.ply"  # TODO
+            output_ply_path = f"{self.file_dir}/{self.camera}_point_cloud.ply"
 
             o3d.io.write_point_cloud(output_ply_path, pcd, write_ascii=True)
             rospy.loginfo("Saved point cloud to %s (%d points)", output_ply_path, len(pcd.points))
