@@ -7,6 +7,7 @@ from sensor_msgs.msg import CompressedImage as msg_CompressedImage
 from sensor_msgs.msg import PointCloud2 as msg_PointCloud2
 import sensor_msgs.point_cloud2 as pc2
 from sensor_msgs.msg import Imu as msg_Imu
+from sensor_msgs.msg import CameraInfo as msg_CameraInfo
 import numpy as np
 from cv_bridge import CvBridge, CvBridgeError
 import cv2
@@ -17,6 +18,9 @@ import open3d as o3d
 from datetime import datetime
 import tf
 import imageio.v2 as imageio
+import json
+from pathlib import Path
+
 
 try:
     from theora_image_transport.msg import Packet as msg_theora
@@ -64,9 +68,45 @@ class CWaitForMessage:
                        'alignedDepthColor': {'topic': f'/{self.camera}/aligned_depth_to_color/image_raw', 'callback': self.imageColorCallback, 'msg_type': msg_Image},
                        'static_tf': {'topic': f'/{self.camera}/color/image_raw', 'callback': self.imageColorCallback, 'msg_type': msg_Image},
                        'accelStream': {'topic': f'/{self.camera}/accel/sample', 'callback': self.imuCallback, 'msg_type': msg_Imu},
+                       'cameraInfo': {'topic': f'/{self.camera}/color/camera_info','callback': self.cameraInfoCallback,'msg_type': msg_CameraInfo,}
                        }
 
         self.func_data = dict()
+
+    def cameraInfoCallback(self, theme_name):
+        def _cameraInfoCallback(data: msg_CameraInfo):
+            if self.func_data[theme_name].get('saved_once'):
+                return
+
+            # Intrinsic 파라미터 추출
+            intr_dict = {
+                "image_resolution": {
+                    "width": data.width,
+                    "height": data.height
+                },
+                "focal_lengths_in_pixels": {
+                    "fx": data.K[0],
+                    "fy": data.K[4]
+                },
+                "principal_point_in_pixels": {
+                    "cx": data.K[2],
+                    "cy": data.K[5]
+                }
+            }
+
+            # 저장 경로
+            json_path = Path(self.file_dir) / "camera_intrinsics.json"
+            json_path.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(json_path, "w") as f:
+                json.dump(intr_dict, f, indent=4)
+
+            rospy.loginfo("Saved camera intrinsics to %s", json_path)
+
+            # 플래그 & 구독 해제
+            self.func_data[theme_name]['saved_once'] = True
+
+        return _cameraInfoCallback
 
     def imuCallback(self, theme_name):
         def _imuCallback(data):
@@ -122,8 +162,8 @@ class CWaitForMessage:
             self.func_data[theme_name]['reported_size'].append((data.width, data.height, data.step))
 
             ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")[:-3]
-            npimage_filename = f"{self.file_dir}/{theme_name}_rgb_npimage_{ts}.jpg"
-            cvimage_filename = f"{self.file_dir}/{theme_name}_rgb_cvimage_{ts}.jpg"
+            npimage_filename = f"{self.file_dir}/image_left.png"
+            cvimage_filename = f"{self.file_dir}/image_left_cv.png"
 
             if data.encoding.lower().startswith("bgr"):
                 rgb_uint8 = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
@@ -177,8 +217,8 @@ class CWaitForMessage:
             self.func_data[theme_name]['reported_size'].append((data.width, data.height, data.step))
 
             ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")[:-3]
-            npimage_filename = f"{self.file_dir}/{theme_name}_depth_npimage_{ts}.jpg"
-            cvimage_filename = f"{self.file_dir}/{theme_name}_depth_cvimage_{ts}.jpg"
+            npimage_filename = f"{self.file_dir}/depth_image.jpg"
+            cvimage_filename = f"{self.file_dir}/depth_image_cv.jpg"
 
             # 1) 16‑bit/float depth → 8‑bit 그레이스케일
             depth_uint8 = cv2.normalize(pyimg, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
@@ -234,7 +274,7 @@ class CWaitForMessage:
 
             # 고유한 파일이름(테마 이름 + 타임스탬프)
             ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")[:-3]
-            output_ply_path = f"{self.file_dir}/{theme_name}_pointcloud_{ts}.ply"  # TODO
+            output_ply_path = f"{self.file_dir}/point_cloud.ply"
 
             o3d.io.write_point_cloud(output_ply_path, pcd, write_ascii=True)
             rospy.loginfo("Saved point cloud to %s (%d points)", output_ply_path, len(pcd.points))
@@ -424,5 +464,6 @@ def visualize_pointcloud(ply_path: str) -> None:
 
 if __name__ == '__main__':
     main()
+
     # visualize_pointcloud("./pointscloud_pointcloud_20250419T184513567.ply")
 
