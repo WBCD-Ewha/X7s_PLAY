@@ -219,6 +219,7 @@ class CWaitForMessage:
             ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")[:-3]
             npimage_filename = f"{self.file_dir}/depth_image.jpg"
             cvimage_filename = f"{self.file_dir}/depth_image_cv.jpg"
+            raw16_filename = f"{self.file_dir}/depth_image_raw16.png"  # 추가: 16bit 저장 파일 이름
 
             # 1) 16‑bit/float depth → 8‑bit 그레이스케일
             depth_uint8 = cv2.normalize(pyimg, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
@@ -226,8 +227,23 @@ class CWaitForMessage:
             imageio.imwrite(npimage_filename, depth_uint8)
             cv2.imwrite(cvimage_filename, depth_uint8)
 
-            rospy.loginfo("Saved depth images to %s  (NumPy)  and  %s  (OpenCV)",
-                          npimage_filename, cvimage_filename)
+            # 2) 원본 16bit 그대로 저장 (추가)
+            if pyimg.dtype == np.float32 or pyimg.dtype == np.float64:
+                # float 타입이면 16bit integer로 변환해서 저장
+                pyimg_to_save = (pyimg * 1000).astype(np.uint16)  # 보통 meter -> mm 변환
+            elif pyimg.dtype == np.uint16:
+                # 이미 16bit integer면 그대로 저장
+                pyimg_to_save = pyimg
+            else:
+                # 다른 타입이면 에러
+                rospy.logwarn("Unexpected depth image dtype: {}".format(pyimg.dtype))
+                pyimg_to_save = pyimg.astype(np.uint16)
+
+            # 16bit depth 저장 (PNG가 16bit를 지원함)
+            cv2.imwrite(raw16_filename, pyimg_to_save)
+
+            rospy.loginfo("Saved depth images to %s  (NumPy)  and  %s  (OpenCV) and %s (Raw 16bit)",
+                          npimage_filename, cvimage_filename, raw16_filename)
 
             self.func_data[theme_name]['saved_once'] = True
 
